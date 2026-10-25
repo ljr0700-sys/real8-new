@@ -1,1 +1,1 @@
-window.REAL8_CONFIG={SUPABASE_URL:"https://fpopjzurpgwpzeicswqj.supabase.co",SUPABASE_ANON_KEY:"sb_publishable_AvA84ZArSrtmzYj_VMJ5tw_QiAjf9kf"};
+window.REAL8_CONFIG={SUPABASE_URL:"https://dbqcqssdfeprqmzyzww.supabase.co",SUPABASE_ANON_KEY:"sb_publishable_nVvSgoKOZ8K_ufJ4OLKh1Q_yfZJr0hN"};
