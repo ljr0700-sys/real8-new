@@ -676,4 +676,61 @@ $("rewardRuleForm").onsubmit=async e=>{
 $("tradeType").dispatchEvent(new Event("change"));
 session();
 loadRules();
+// 휴대폰 문자 인증
+const phonePanel = [...document.querySelectorAll(".panel")]
+  .find(p => p.textContent.includes("휴대폰 문자 로그인"));
+
+if (phonePanel) {
+  const inputs = phonePanel.querySelectorAll("input");
+  const phoneInput = inputs[0];
+  const otpInput = inputs[1];
+
+  const buttons = [...phonePanel.querySelectorAll("button")];
+  const sendBtn = buttons.find(b => b.textContent.includes("인증번호 받기"));
+  const verifyBtn = buttons.find(b => b.textContent.includes("인증번호 확인"));
+
+  function real8Phone(v) {
+    let n = String(v || "").replace(/\D/g, "");
+    if (n.startsWith("0")) n = n.slice(1);
+    return "+82" + n;
+  }
+
+  if (sendBtn) {
+    sendBtn.onclick = async () => {
+      const phone = real8Phone(phoneInput.value);
+      if (phone.length < 12) {
+        alert("휴대폰 번호를 확인해 주세요.");
+        return;
+      }
+
+      const { error } = await db.auth.signInWithOtp({ phone });
+
+      if (error) {
+        alert("인증번호 발송 실패: " + error.message);
+      } else {
+        alert("인증번호를 문자로 보냈습니다.");
+      }
+    };
+  }
+
+  if (verifyBtn) {
+    verifyBtn.onclick = async () => {
+      const phone = real8Phone(phoneInput.value);
+      const token = otpInput.value.trim();
+
+      const { error } = await db.auth.verifyOtp({
+        phone,
+        token,
+        type: "sms"
+      });
+
+      if (error) {
+        alert("인증번호가 맞지 않습니다: " + error.message);
+      } else {
+        alert("휴대폰 인증이 완료되었습니다.");
+        await session();
+      }
+    };
+  }
+}
 })();
