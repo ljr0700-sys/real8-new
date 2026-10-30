@@ -297,7 +297,7 @@ async function loadMatches(){
       <div>${esc(cond||x.content||"-")}</div>
       <div class="meta">지역 ${esc(x.region||"-")} / 금액 ${Number(x.price||0).toLocaleString()}원 / 면적 ${esc(d.area||"-")}</div>
  </div>
-</details>  
+</details>`;  
   }).join("")||"조건에 가까운 등록정보가 없습니다.";
 }
 
