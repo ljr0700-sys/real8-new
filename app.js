@@ -548,10 +548,9 @@ async function loadMy(){
   if(rr.error)show("convertMsg","보상내역 조회 오류: "+rr.error.message,false);
 
   renderBalances(r);
-  $("myTradeCount").textContent=p.filter(x=>TRADE_TYPES.includes(x.category)).length.toLocaleString();
-  $("myPostCount").textContent=p.length.toLocaleString();
-  $("myParticipationCount").textContent=pa.length.toLocaleString();
-
+if($("myTradeCount")) $("myTradeCount").textContent=p.filter(x=>TRADE_TYPES.includes(x.category)).length.toLocaleString();
+if($("myPostCount")) $("myPostCount").textContent=p.length.toLocaleString();
+if($("myParticipationCount")) $("myParticipationCount").textContent=pa.length.toLocaleString();
   const acts=[
     ...p.map(x=>({
       t:`등록 ${x.category}${x.transaction_side?` · ${x.transaction_side}`:""}${x.title?` · ${x.title}`:""} · ${statusLabel(x)}`,
