@@ -602,8 +602,7 @@ async function loadAdmin(){
   $("ruleOpinion").value=rules.opinion_token;
   $("ruleConversion").value=rules.token_per_coin;
   $("ruleCoinValue").value=rules.coin_display_value;
-  $("rulePropertyCoin").value=rules.property_coin_per_100m;
-
+  if($("rulePropertyCoin")) $("rulePropertyCoin").value=rules.property_coin_per_100m;
   const [hist,owners]=await Promise.all([
     db.from("reward_rule_history_v4").select("*").order("changed_at",{ascending:false}).limit(100),
     db.from("posts").select("id,author_id,category,asset_address,public_price,owner_verified,status,created_at").eq("owner_claim",true).order("created_at",{ascending:false})
@@ -653,7 +652,7 @@ $("rewardRuleForm").onsubmit=async e=>{
     opinion_token:Number($("ruleOpinion").value||0),
     token_per_coin:Number($("ruleConversion").value||100),
     coin_display_value:Number($("ruleCoinValue").value||0),
-    property_coin_per_100m:Number($("rulePropertyCoin").value||1)
+property_coin_per_100m:Number($("rulePropertyCoin")?.value||rules.property_coin_per_100m||1)
   };
   const {error}=await db.rpc("update_reward_rules_v4",{p_rules:payload});
   if(error){
