@@ -608,13 +608,13 @@ async function loadAdmin(){
     db.from("posts").select("id,author_id,category,asset_address,public_price,owner_verified,status,created_at").eq("owner_claim",true).order("created_at",{ascending:false})
   ]);
 
-  $("ruleHistory").innerHTML=(hist.data||[]).map(x=>`
+ if($("ruleHistory")) $("ruleHistory").innerHTML=(hist.data||[]).map(x=>`
     <div class="item"><b>${esc(x.field_name)}</b>
     <div>${esc(x.old_value)} → ${esc(x.new_value)}</div>
     <div class="meta">${new Date(x.changed_at).toLocaleString("ko-KR")}</div></div>
   `).join("")||"변경 이력이 없습니다.";
 
-  $("ownerReviewList").innerHTML=(owners.data||[]).map(x=>`
+if($("ownerReviewList")) $("ownerReviewList").innerHTML=(owners.data||[]).map(x=>`
     <div class="item">
       <b>${esc(x.category)} · ${esc(x.asset_address||"주소 미입력")}</b>
       <span class="badge ${x.owner_verified?"":"wait"}">${x.owner_verified?"검정 완료":"검정 대기"}</span>
