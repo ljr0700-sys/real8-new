@@ -192,20 +192,63 @@
 </section>
 
 <section id="mypage" class="page">
-  <div class="panel"><h2>마이페이지</h2><p>내 회원정보·보상·내가 등록한 정보만 확인하고 수정·삭제합니다.</p></div>
+  <div class="panel">
+    <h2>마이페이지</h2>
+    <p>내 회원정보·자산·내가 등록한 정보·보상·전환 기록을 확인합니다.</p>
+  </div>
+
   <div class="cols">
-    <div class="panel"><h3>내 회원정보</h3><div id="profileBox">로그인 후 표시됩니다.</div><button id="logoutBtn" class="secondary">로그아웃</button></div>
+    <div class="panel">
+      <h3>내 회원정보</h3>
+      <div id="profileBox">로그인 후 표시됩니다.</div>
+      <button id="logoutBtn" class="secondary">로그아웃</button>
+    </div>
+
     <div class="panel">
       <h3>내 자산 요약</h3>
-      <div class="summary3"><div><span>보유 TOKEN</span><strong id="myToken">0</strong></div><div><span>보유 COIN</span><strong id="myCoin">0</strong></div><div><span>코인 환산 표시값</span><strong id="myValue">0원</strong></div></div>
-      <div class="summary3"><div><span>내 등록글</span><strong id="myPostCount">0</strong></div><div><span>내 참여</span><strong id="myParticipationCount">0</strong></div><div><span>관리자 여부</span><strong id="myRole">일반</strong></div></div>
-      <button id="convertBtn" class="primary">보유 TOKEN을 COIN으로 전환</button><div id="convertMsg" class="msg"></div>
+      <div class="summary3">
+        <div><span>보유 TOKEN</span><strong id="myToken">0</strong></div>
+        <div><span>보유 COIN</span><strong id="myCoin">0</strong></div>
+        <div><span>코인 환산 표시값</span><strong id="myValue">0원</strong></div>
+      </div>
+
+      <div class="summary3">
+        <div><span>등록 부동산·거래</span><strong id="myTradeCount">0</strong></div>
+        <div><span>내 등록 정보</span><strong id="myPostCount">0</strong></div>
+        <div><span>내 참여</span><strong id="myParticipationCount">0</strong></div>
+      </div>
+
+      <button id="convertBtn" class="primary">보유 TOKEN을 COIN으로 전환</button>
+      <div id="convertMsg" class="msg"></div>
     </div>
   </div>
-  <div class="panel"><h3>내가 등록한 정보</h3><div id="myPosts" class="list"></div></div>
-  <div class="panel"><h3>내 활동·보상 기록</h3><div id="myActivity" class="list"></div></div>
+
+  <div class="panel">
+    <h3>내가 등록한 정보</h3>
+    <div id="myPosts" class="list"></div>
+  </div>
+
+  <div class="panel">
+    <h3>보상 기록</h3>
+    <div id="myRewards" class="list"></div>
+  </div>
+
+  <div class="panel">
+    <h3>전환 기록</h3>
+    <div id="myConversions" class="list"></div>
+  </div>
+
+  <div class="panel">
+    <h3>내 참여 기록</h3>
+    <div id="myActivity" class="list"></div>
+  </div>
+
   <div id="adminArea" class="hidden">
-    <div class="panel admin-title"><h2>관리자 설정</h2><p>role='admin'인 회원에게만 표시됩니다.</p></div>
+    <div class="panel admin-title">
+      <h2>관리자 설정</h2>
+      <p>관리자에게만 표시됩니다.</p>
+    </div>
+
     <div class="cols">
       <div class="panel">
         <h3>보상 기준</h3>
@@ -222,9 +265,14 @@
         </form>
         <div id="adminMsg" class="msg"></div>
       </div>
-      <div class="panel"><h3>관리자 등록</h3><p>회원가입 후 Supabase SQL Editor에서 해당 회원 이메일의 role을 admin으로 변경합니다.</p><code>update public.profiles set role='admin' where email='관리자이메일';</code></div>
+
+      <div class="panel">
+        <h3>관리자 등록</h3>
+        <p>회원가입 후 Supabase SQL Editor에서 해당 회원 이메일의 role을 admin으로 변경합니다.</p>
+      </div>
     </div>
   </div>
+</section>
 </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
