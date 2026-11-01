@@ -4,7 +4,7 @@ const db=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const TRADE_TYPES=["건축","매매","전세","월세","렌트","바꿔살기","펜션"];
-const CULTURE_TYPES=["거주문화","집수리","인테리어","정원·조경","건축기술","에너지절약","스마트홈","공동생활","지역생활정보"];
+const CULTURE_TYPES=["거주문화","집수리","인테리어","정원·조경 ","건축기술","에너지절약","스마트홈","공동생활","지역생활정보"];
 const parties={
   "건축":["건축주","시공·설계 참여자"],"매매":["매도 희망","매수 희망"],
   "전세":["임대 희망","임차 희망"],"월세":["임대 희망","임차 희망"],
@@ -526,9 +526,14 @@ $("convertBtn").onclick=async()=>{
 
 async function loadMy(){
   await session(); await loadRules();
+
   if(!user){
     $("profileBox").textContent="로그인 후 이용할 수 있습니다.";
     $("adminArea").classList.add("hidden");
+    if($("myPosts")) $("myPosts").textContent="";
+    if($("myRewards")) $("myRewards").textContent="";
+    if($("myConversions")) $("myConversions").textContent="";
+    if($("myActivity")) $("myActivity").textContent="";
     return;
   }
 
@@ -544,36 +549,131 @@ async function loadMy(){
     db.from("participations").select("kind,created_at,post_id").eq("user_id",user.id).order("created_at",{ascending:false})
   ]);
 
-  const r=rr.data||[], p=pp.data||[], pa=parts.data||[];
-  if(rr.error)show("convertMsg","보상내역 조회 오류: "+rr.error.message,false);
+  const r=rr.data||[];
+  const p=pp.data||[];
+  const pa=parts.data||[];
+
+  if(rr.error) show("convertMsg","보상내역 조회 오류: "+rr.error.message,false);
 
   renderBalances(r);
-if($("myTradeCount")) $("myTradeCount").textContent=p.filter(x=>TRADE_TYPES.includes(x.category)).length.toLocaleString();
-if($("myPostCount")) $("myPostCount").textContent=p.length.toLocaleString();
-if($("myParticipationCount")) $("myParticipationCount").textContent=pa.length.toLocaleString();
-  const acts=[
-    ...p.map(x=>({
-      t:`등록 ${x.category}${x.transaction_side?` · ${x.transaction_side}`:""}${x.title?` · ${x.title}`:""} · ${statusLabel(x)}`,
-      d:x.created_at,h:x.record_hash
-    })),
-    ...pa.map(x=>({t:`참여 ${x.kind}`,d:x.created_at,h:""})),
-    ...r.map(x=>({
-      t:`보상 ${x.action||"활동"} / TOKEN ${Number(x.token_amount||0)} / COIN ${Number(x.coin_amount||0)}`,
-      d:x.created_at,h:x.issue_hash
-    }))
-  ].sort((a,b)=>new Date(b.d)-new Date(a.d));
 
-  $("myActivity").innerHTML=acts.map(x=>`
-    <div class="item">
-      <b>${esc(x.t)}</b>
-      <div class="meta">${new Date(x.d).toLocaleString("ko-KR")}</div>
-      ${x.h?`<div class="hash">해시 ${esc(x.h)}</div>`:""}
-    </div>
-  `).join("")||"아직 활동 내역이 없습니다.";
+  if($("myTradeCount"))
+    $("myTradeCount").textContent=p.filter(x=>TRADE_TYPES.includes(x.category)).length.toLocaleString();
+
+  if($("myPostCount"))
+    $("myPostCount").textContent=p.length.toLocaleString();
+
+  if($("myParticipationCount"))
+    $("myParticipationCount").textContent=pa.length.toLocaleString();
+
+  if($("myPosts")){
+    $("myPosts").innerHTML=p.map(x=>{
+      const d=x.details_json||{};
+      const condition=x.transaction_side==="을"?x.condition_b:x.condition_a;
+
+      return `
+        <div class="item">
+          <b>${esc(x.category)}${x.title?` · ${esc(x.title)}`:""}</b>
+          ${statusBadge(x)}
+
+          <div class="meta">
+            ${x.asset_address?`주소 ${esc(x.asset_address)} / `:""}
+            ${x.region?`지역 ${esc(x.region)} / `:""}
+            ${Number(x.price||0)?`금액 ${Number(x.price||0).toLocaleString()}원 / `:""}
+            ${new Date(x.created_at).toLocaleString("ko-KR")}
+          </div>
+
+          <div>${esc(condition||x.content||"")}</div>
+
+          ${d.area?`<div class="meta">면적 ${esc(d.area)}</div>`:""}
+          ${x.record_hash?`<div class="hash">해시 ${esc(x.record_hash)}</div>`:""}
+
+          <button class="secondary editMyPost" data-id="${x.id}">
+            수정
+          </button>
+
+          <div id="editMsg_${x.id}" class="msg"></div>
+        </div>
+      `;
+    }).join("")||"아직 등록한 정보가 없습니다.";
+  }
+
+  if($("myRewards")){
+    const rewards=r.filter(x=>x.action!=="token_convert");
+
+    $("myRewards").innerHTML=rewards.map(x=>`
+      <div class="item">
+        <b>보상 ${esc(x.action||"활동")}</b>
+        <div>
+          TOKEN ${Number(x.token_amount||0).toLocaleString()}
+          / COIN ${Number(x.coin_amount||0).toLocaleString()}
+        </div>
+        <div class="meta">${new Date(x.created_at).toLocaleString("ko-KR")}</div>
+        ${x.issue_hash?`<div class="hash">해시 ${esc(x.issue_hash)}</div>`:""}
+      </div>
+    `).join("")||"아직 보상 기록이 없습니다.";
+  }
+
+  if($("myConversions")){
+    const conversions=r.filter(x=>x.action==="token_convert");
+
+    $("myConversions").innerHTML=conversions.map(x=>`
+      <div class="item">
+        <b>전환</b>
+        <div>
+          ${Math.abs(Number(x.token_amount||0)).toLocaleString()} TOKEN
+          → ${Number(x.coin_amount||0).toLocaleString()} COIN
+        </div>
+        <div class="meta">${new Date(x.created_at).toLocaleString("ko-KR")}</div>
+      </div>
+    `).join("")||"아직 전환 기록이 없습니다.";
+  }
+
+  if($("myActivity")){
+    $("myActivity").innerHTML=pa.map(x=>`
+      <div class="item">
+        <b>참여 ${esc(x.kind)}</b>
+        <div class="meta">${new Date(x.created_at).toLocaleString("ko-KR")}</div>
+      </div>
+    `).join("")||"아직 참여 기록이 없습니다.";
+  }
+
+  document.querySelectorAll(".editMyPost").forEach(b=>{
+    b.onclick=async()=>{
+      const id=b.dataset.id;
+      const post=p.find(x=>String(x.id)===String(id));
+      if(!post)return;
+
+      const current=post.content||"";
+      const updated=prompt("수정할 내용을 입력해 주세요.",current);
+
+      if(updated===null)return;
+
+      const text=updated.trim();
+      if(!text){
+        show("editMsg_"+id,"내용을 입력해 주세요.",false);
+        return;
+      }
+
+      const {error}=await db
+        .from("posts")
+        .update({content:text})
+        .eq("id",id)
+        .eq("author_id",user.id);
+
+      show(
+        "editMsg_"+id,
+        error?error.message:"수정되었습니다.",
+        !error
+      );
+
+      if(!error) loadMy();
+    };
+  });
 
   const admin=isAdminUser();
   $("adminArea").classList.toggle("hidden",!admin);
-  if(admin)loadAdmin();
+  if(admin) loadAdmin();
 }
 
 /* 관리자 */
