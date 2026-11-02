@@ -175,7 +175,21 @@ $("logoutBtn").onclick=async()=>{
   $("myActivity").textContent="";
   show("loginMsg","");
 };
+// 카카오 로그인
+async function loginWithKakao() {
+  const { error } = await db.auth.signInWithOAuth({
+    provider: "kakao",
+    options: {
+      redirectTo: window.location.origin + window.location.pathname
+    }
+  });
 
+  if (error) {
+    alert("카카오 로그인 오류: " + error.message);
+  }
+}
+
+window.loginWithKakao = loginWithKakao;
 /* 파일 */
 async function uploadFile(input,folder){
   const f=input.files?.[0];
