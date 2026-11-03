@@ -55,8 +55,13 @@ function phoneVerified(u=user){
   return Boolean(u?.phone);
 }
 function providerName(u=user){
-  const p=u?.app_metadata?.provider;
-  return p==="kakao"?"카카오":p==="email"?"이메일":(p||"회원");
+  const primary=u?.app_metadata?.provider||"";
+  const providers=Array.isArray(u?.app_metadata?.providers)?u.app_metadata.providers:[];
+  const all=new Set([primary,...providers].filter(Boolean));
+  if(all.has("kakao") && all.has("email"))return "카카오·이메일 연결 계정";
+  if(all.has("kakao"))return "카카오";
+  if(all.has("email"))return "이메일";
+  return primary||"회원";
 }
 function scrollToIdentity(message){
   setPage("home");
@@ -86,8 +91,8 @@ async function need(id){
     return false;
   }
   if(!phoneVerified()){
-    show(id,"휴대폰 본인확인을 먼저 완료해 주세요.",false);
-    scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.`);
+    show(id,"휴대폰 번호 확인을 먼저 완료해 주세요.",false);
+    scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.`);
     return false;
   }
   return true;
@@ -117,6 +122,7 @@ document.querySelectorAll(".go").forEach(b=>b.onclick=()=>{
 /* 회원가입·로그인 */
 $("signupForm").onsubmit=async e=>{
   e.preventDefault();
+  sessionStorage.setItem("real8_login_provider","email");
   if($("signupPassword").value!==$("signupPassword2").value)
     return show("signupMsg","비밀번호가 서로 다릅니다.",false);
   const {data,error}=await db.auth.signUp({
@@ -129,24 +135,25 @@ $("signupForm").onsubmit=async e=>{
   });
   if(error)return show("signupMsg",error.message,false);
   show("signupMsg",data.session?
-    "회원가입이 완료되었습니다. 이제 휴대폰 본인확인을 진행해 주세요.":
-    "회원가입이 접수되었습니다. 이메일 확인 링크를 누르고 로그인한 뒤 휴대폰 본인확인을 진행해 주세요.");
+    "회원가입이 완료되었습니다. 이제 휴대폰 번호 확인을 진행해 주세요.":
+    "회원가입이 접수되었습니다. 이메일 확인 링크를 누르고 로그인한 뒤 휴대폰 번호 확인을 진행해 주세요.");
   await session();
-  if(data.session && !phoneVerified()) scrollToIdentity("회원가입이 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.");
+  if(data.session && !phoneVerified()) scrollToIdentity("회원가입이 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.");
 };
 
 $("loginForm").onsubmit=async e=>{
   e.preventDefault();
+  sessionStorage.setItem("real8_login_provider","email");
   const {error}=await db.auth.signInWithPassword({
     email:$("loginEmail").value.trim(),
     password:$("loginPassword").value
   });
   if(error)return show("loginMsg",error.message,false);
   await session();
-  if(phoneVerified()) show("loginMsg","로그인되었습니다. 본인확인도 완료된 회원입니다.");
+  if(phoneVerified()) show("loginMsg","로그인되었습니다. 휴대폰 번호 확인도 완료된 회원입니다.");
   else {
-    show("loginMsg","로그인되었습니다. 휴대폰 본인확인을 완료해 주세요.");
-    scrollToIdentity("로그인은 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.");
+    show("loginMsg","로그인되었습니다. 휴대폰 번호 확인을 완료해 주세요.");
+    scrollToIdentity("로그인은 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.");
   }
 };
 
@@ -169,8 +176,8 @@ db.auth.onAuthStateChange((event,newSession)=>{
     setTimeout(async()=>{
       await session();
       if(user && !phoneVerified() && event!=="USER_UPDATED"){
-        show("loginMsg",`${providerName()} 로그인되었습니다. 휴대폰 본인확인을 완료해 주세요.`);
-        scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.`);
+        show("loginMsg",`${providerName()} 로그인되었습니다. 휴대폰 번호 확인을 완료해 주세요.`);
+        scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.`);
       }
     },0);
   }
@@ -196,7 +203,10 @@ $("passwordResetForm").onsubmit=async e=>{
 
 $("logoutBtn").onclick=async()=>{
   await db.auth.signOut();
+  sessionStorage.removeItem("real8_login_provider");
   user=null; profile=null;
+  if($("loginEmail")) $("loginEmail").value="";
+  if($("loginPassword")) $("loginPassword").value="";
   $("profileBox").textContent="로그아웃되었습니다.";
   $("adminArea").classList.add("hidden");
   $("myToken").textContent="0";
@@ -210,6 +220,7 @@ $("logoutBtn").onclick=async()=>{
 };
 // 카카오 로그인: 처음 로그인한 회원은 돌아온 뒤 휴대폰 본인확인을 진행합니다.
 async function loginWithKakao(){
+  sessionStorage.setItem("real8_login_provider","kakao");
   show("loginMsg","카카오 로그인 화면으로 이동합니다.");
   const {error}=await db.auth.signInWithOAuth({
     provider:"kakao",
@@ -581,10 +592,26 @@ async function loadMy(){
     return;
   }
 
+  const connectedProviders=Array.isArray(user?.app_metadata?.providers)
+    ? user.app_metadata.providers
+    : [user?.app_metadata?.provider].filter(Boolean);
+  const providerText=connectedProviders.includes("kakao") && connectedProviders.includes("email")
+    ? "카카오 · 이메일"
+    : connectedProviders.includes("kakao")
+      ? "카카오"
+      : connectedProviders.includes("email")
+        ? "이메일"
+        : providerName();
+
+  const emailLine=user.email
+    ? `<div class="meta">계정 이메일 ${esc(user.email)}</div>`
+    : "";
+
   $("profileBox").innerHTML=`
-    <b>${esc(profile?.display_name||user.user_metadata?.display_name||user.email)}</b><br>
-    ${esc(user.email)}<br>
-    <span class="badge">${user.email_confirmed_at?"이메일 확인":"이메일 확인 필요"}</span>
+    <b>${esc(profile?.display_name||user.user_metadata?.display_name||user.user_metadata?.name||user.email||"회원")}</b><br>
+    <span class="badge">로그인 연결: ${esc(providerText)}</span>
+    ${emailLine}
+    ${user.phone?'<br><span class="badge">휴대폰 번호 확인 완료</span>':'<br><span class="badge wait">휴대폰 번호 확인 필요</span>'}
     ${isAdminUser()?'<br><span class="badge">관리자</span>':""}`;
 
   const [rr,pp,parts]=await Promise.all([
@@ -818,7 +845,7 @@ property_coin_per_100m:Number($("rulePropertyCoin")?.value||rules.property_coin_
 $("tradeType").dispatchEvent(new Event("change"));
 session();
 loadRules();
-// 휴대폰 본인확인: 현재 로그인된 같은 회원 계정에 전화번호를 연결합니다.
+// 휴대폰 번호 확인: 현재 로그인된 같은 회원 계정에 SMS OTP로 전화번호 소유 여부를 확인합니다.
 const phoneInput=$("phoneNumber");
 const otpInput=$("phoneOtp");
 const sendBtn=$("sendOtpBtn");
@@ -835,7 +862,7 @@ if(sendBtn){
   sendBtn.onclick=async()=>{
     await session();
     if(!user)return scrollToIdentity("먼저 회원가입 또는 카카오/이메일 로그인을 해 주세요.");
-    if(phoneVerified())return show("phoneMsg","이미 휴대폰 본인확인이 완료된 회원입니다.");
+    if(phoneVerified())return show("phoneMsg","이미 휴대폰 번호 확인이 완료된 회원입니다.");
 
     const name=$("identityName")?.value.trim();
     if(!name)return show("phoneMsg","본인 이름을 입력해 주세요.",false);
@@ -871,8 +898,8 @@ if(verifyBtn){
     if(name){
       try{await db.from("profiles").update({display_name:name}).eq("user_id",user.id);}catch(_e){}
     }
-    show("phoneMsg","본인확인이 완료되었습니다. 이제 REAL8의 등록 기능을 이용할 수 있습니다.");
-    show("loginMsg","로그인 및 휴대폰 본인확인이 완료되었습니다.");
+    show("phoneMsg","휴대폰 번호 확인이 완료되었습니다. 이제 REAL8의 등록 기능을 이용할 수 있습니다.");
+    show("loginMsg","로그인 및 휴대폰 번호 확인이 완료되었습니다.");
   };
 }
 
