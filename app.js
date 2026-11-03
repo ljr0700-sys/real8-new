@@ -608,7 +608,7 @@ async function loadMy(){
     : "";
 
   $("profileBox").innerHTML=`
-    <b>${esc(profile?.display_name||user.user_metadata?.display_name||user.user_metadata?.name||user.email||"회원")}</b><br>
+  <b>${esc(user.user_metadata?.display_name||user.user_metadata?.name||profile?.display_name||user.email)}</b>
     <span class="badge">로그인 연결: ${esc(providerText)}</span>
     ${emailLine}
     ${user.phone?'<br><span class="badge">휴대폰 번호 확인 완료</span>':'<br><span class="badge wait">휴대폰 번호 확인 필요</span>'}
