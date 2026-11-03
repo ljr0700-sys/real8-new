@@ -63,25 +63,22 @@
         <button class="textbtn" type="button" id="resetPasswordBtn">비밀번호 재설정 이메일 받기</button>
       </form>
       <div class="auth-divider">또는</div>
-<button type="button"
-  onclick="loginWithKakao()"
-  style="background:#FEE500;color:#191919;padding:12px 20px;border:0;border-radius:8px;cursor:pointer;font-weight:bold;">
-  카카오로 로그인
-</button>
       <div class="social-row">
         <button id="kakaoLoginBtn" class="social kakao" type="button">카카오로 로그인</button>
         <button id="naverLoginBtn" class="social naver" type="button">네이버로 로그인</button>
       </div>
       <div id="loginMsg" class="msg"></div>
     </div>
-    <div class="panel">
-      <h2>휴대폰 문자 로그인</h2>
-      <p class="note">문자 인증은 Supabase에서 SMS 제공업체를 먼저 연결해야 실제 발송됩니다.</p>
-      <label>휴대폰 번호<input id="phoneNumber" inputmode="tel" placeholder="예: 01012345678"></label>
+    <div class="panel" id="identityPanel">
+      <h2>본인확인</h2>
+      <p class="note">회원가입 또는 카카오 로그인 후 휴대폰 인증을 완료해야 정보 등록 기능을 이용할 수 있습니다.</p>
+      <label>이름<input id="identityName" autocomplete="name" placeholder="본인 이름"></label>
+      <label>휴대폰 번호<input id="phoneNumber" inputmode="tel" autocomplete="tel" placeholder="예: 01012345678"></label>
       <button id="sendOtpBtn" class="secondary" type="button">인증번호 받기</button>
-      <label>인증번호<input id="phoneOtp" inputmode="numeric" placeholder="문자로 받은 번호"></label>
-      <button id="verifyOtpBtn" class="primary" type="button">인증번호 확인 · 로그인</button>
+      <label>인증번호<input id="phoneOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="문자로 받은 6자리 번호"></label>
+      <button id="verifyOtpBtn" class="primary" type="button">인증번호 확인 · 본인확인 완료</button>
       <div id="phoneMsg" class="msg"></div>
+      <p class="note identity-note">현재 단계는 휴대폰 번호 소유 확인입니다. 실제 상용 서비스에서 법적 실명 본인확인이 필요하면 PASS·NICE·KCB 같은 본인확인 서비스 연동이 추가로 필요합니다.</p>
     </div>
     <div class="panel">
       <h2>회원가입</h2>

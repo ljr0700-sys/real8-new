@@ -51,6 +51,18 @@ function isAdminUser(){
     (user?.email||"").toLowerCase()==="ljr0700@naver.com";
 }
 
+function phoneVerified(u=user){
+  return Boolean(u?.phone);
+}
+function providerName(u=user){
+  const p=u?.app_metadata?.provider;
+  return p==="kakao"?"카카오":p==="email"?"이메일":(p||"회원");
+}
+function scrollToIdentity(message){
+  setPage("home");
+  if(message)show("phoneMsg",message,false);
+  setTimeout(()=>$("identityPanel")?.scrollIntoView({behavior:"smooth",block:"center"}),80);
+}
 async function session(){
   const {data:{session}}=await db.auth.getSession();
   user=session?.user||null;
@@ -58,6 +70,8 @@ async function session(){
   if(user){
     const {data,error}=await db.from("profiles").select("*").eq("user_id",user.id).maybeSingle();
     if(!error)profile=data;
+    const n=user.user_metadata?.display_name||user.user_metadata?.name||profile?.display_name||"";
+    if($("identityName") && !$("identityName").value) $("identityName").value=n;
   }
   return user;
 }
@@ -68,7 +82,12 @@ async function loadRules(){
 async function need(id){
   await session();
   if(!user){
-    show(id,"먼저 로그인해 주세요.",false);
+    show(id,"먼저 회원가입 또는 로그인해 주세요.",false);
+    return false;
+  }
+  if(!phoneVerified()){
+    show(id,"휴대폰 본인확인을 먼저 완료해 주세요.",false);
+    scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.`);
     return false;
   }
   return true;
@@ -110,9 +129,10 @@ $("signupForm").onsubmit=async e=>{
   });
   if(error)return show("signupMsg",error.message,false);
   show("signupMsg",data.session?
-    "회원가입과 로그인이 완료되었습니다.":
-    "회원가입이 접수되었습니다. 이메일 확인 링크를 누른 뒤 로그인해 주세요.");
+    "회원가입이 완료되었습니다. 이제 휴대폰 본인확인을 진행해 주세요.":
+    "회원가입이 접수되었습니다. 이메일 확인 링크를 누르고 로그인한 뒤 휴대폰 본인확인을 진행해 주세요.");
   await session();
+  if(data.session && !phoneVerified()) scrollToIdentity("회원가입이 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.");
 };
 
 $("loginForm").onsubmit=async e=>{
@@ -123,7 +143,11 @@ $("loginForm").onsubmit=async e=>{
   });
   if(error)return show("loginMsg",error.message,false);
   await session();
-  show("loginMsg","로그인되었습니다.");
+  if(phoneVerified()) show("loginMsg","로그인되었습니다. 본인확인도 완료된 회원입니다.");
+  else {
+    show("loginMsg","로그인되었습니다. 휴대폰 본인확인을 완료해 주세요.");
+    scrollToIdentity("로그인은 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.");
+  }
 };
 
 $("resetPasswordBtn").onclick=async()=>{
@@ -139,8 +163,17 @@ function openPasswordReset(){
   $("passwordResetPanel").classList.remove("hidden");
   $("homeAuth").classList.add("hidden");
 }
-db.auth.onAuthStateChange(event=>{
-  if(event==="PASSWORD_RECOVERY")openPasswordReset();
+db.auth.onAuthStateChange((event,newSession)=>{
+  if(event==="PASSWORD_RECOVERY")return openPasswordReset();
+  if(event==="SIGNED_IN" || event==="INITIAL_SESSION" || event==="USER_UPDATED"){
+    setTimeout(async()=>{
+      await session();
+      if(user && !phoneVerified() && event!=="USER_UPDATED"){
+        show("loginMsg",`${providerName()} 로그인되었습니다. 휴대폰 본인확인을 완료해 주세요.`);
+        scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 본인확인을 진행해 주세요.`);
+      }
+    },0);
+  }
 });
 if(location.hash.includes("type=recovery")||location.search.includes("type=recovery"))openPasswordReset();
 
@@ -175,21 +208,18 @@ $("logoutBtn").onclick=async()=>{
   $("myActivity").textContent="";
   show("loginMsg","");
 };
-// 카카오 로그인
-async function loginWithKakao() {
-  const { error } = await db.auth.signInWithOAuth({
-    provider: "kakao",
-    options: {
-      redirectTo: window.location.origin + window.location.pathname
-    }
+// 카카오 로그인: 처음 로그인한 회원은 돌아온 뒤 휴대폰 본인확인을 진행합니다.
+async function loginWithKakao(){
+  show("loginMsg","카카오 로그인 화면으로 이동합니다.");
+  const {error}=await db.auth.signInWithOAuth({
+    provider:"kakao",
+    options:{redirectTo:window.location.origin+window.location.pathname}
   });
-
-  if (error) {
-    alert("카카오 로그인 오류: " + error.message);
-  }
+  if(error)show("loginMsg","카카오 로그인 오류: "+error.message,false);
 }
-
-window.loginWithKakao = loginWithKakao;
+window.loginWithKakao=loginWithKakao;
+if($("kakaoLoginBtn")) $("kakaoLoginBtn").onclick=loginWithKakao;
+if($("naverLoginBtn")) $("naverLoginBtn").onclick=()=>show("loginMsg","네이버 로그인은 아직 연결 전입니다. 이메일 또는 카카오 로그인을 이용해 주세요.",false);
 /* 파일 */
 async function uploadFile(input,folder){
   const f=input.files?.[0];
@@ -788,61 +818,62 @@ property_coin_per_100m:Number($("rulePropertyCoin")?.value||rules.property_coin_
 $("tradeType").dispatchEvent(new Event("change"));
 session();
 loadRules();
-// 휴대폰 문자 인증
-const phonePanel = [...document.querySelectorAll(".panel")]
-  .find(p => p.textContent.includes("휴대폰 문자 로그인"));
+// 휴대폰 본인확인: 현재 로그인된 같은 회원 계정에 전화번호를 연결합니다.
+const phoneInput=$("phoneNumber");
+const otpInput=$("phoneOtp");
+const sendBtn=$("sendOtpBtn");
+const verifyBtn=$("verifyOtpBtn");
 
-if (phonePanel) {
-  const inputs = phonePanel.querySelectorAll("input");
-  const phoneInput = inputs[0];
-  const otpInput = inputs[1];
-
-  const buttons = [...phonePanel.querySelectorAll("button")];
-  const sendBtn = buttons.find(b => b.textContent.includes("인증번호 받기"));
-  const verifyBtn = buttons.find(b => b.textContent.includes("인증번호 확인"));
-
-  function real8Phone(v) {
-    let n = String(v || "").replace(/\D/g, "");
-    if (n.startsWith("0")) n = n.slice(1);
-    return "+82" + n;
-  }
-
-  if (sendBtn) {
-    sendBtn.onclick = async () => {
-      const phone = real8Phone(phoneInput.value);
-      if (phone.length < 12) {
-        alert("휴대폰 번호를 확인해 주세요.");
-        return;
-      }
-
-      const { error } = await db.auth.signInWithOtp({ phone });
-
-      if (error) {
-        alert("인증번호 발송 실패: " + error.message);
-      } else {
-        alert("인증번호를 문자로 보냈습니다.");
-      }
-    };
-  }
-
-  if (verifyBtn) {
-    verifyBtn.onclick = async () => {
-      const phone = real8Phone(phoneInput.value);
-      const token = otpInput.value.trim();
-
-      const { error } = await db.auth.verifyOtp({
-        phone,
-        token,
-        type: "sms"
-      });
-
-      if (error) {
-        alert("인증번호가 맞지 않습니다: " + error.message);
-      } else {
-        alert("휴대폰 인증이 완료되었습니다.");
-        await session();
-      }
-    };
-  }
+function real8Phone(v){
+  let n=String(v||"").replace(/\D/g,"");
+  if(n.startsWith("82"))return "+"+n;
+  if(n.startsWith("0"))n=n.slice(1);
+  return "+82"+n;
 }
+
+if(sendBtn){
+  sendBtn.onclick=async()=>{
+    await session();
+    if(!user)return scrollToIdentity("먼저 회원가입 또는 카카오/이메일 로그인을 해 주세요.");
+    if(phoneVerified())return show("phoneMsg","이미 휴대폰 본인확인이 완료된 회원입니다.");
+
+    const name=$("identityName")?.value.trim();
+    if(!name)return show("phoneMsg","본인 이름을 입력해 주세요.",false);
+    const phone=real8Phone(phoneInput.value);
+    if(!/^\+8210\d{8}$/.test(phone))return show("phoneMsg","휴대폰 번호를 01012345678 형식으로 입력해 주세요.",false);
+
+    const meta={...(user.user_metadata||{}),display_name:name};
+    const {error:metaError}=await db.auth.updateUser({data:meta});
+    if(metaError)return show("phoneMsg","이름 저장 오류: "+metaError.message,false);
+
+    const {error}=await db.auth.updateUser({phone});
+    if(error)return show("phoneMsg","인증번호 발송 실패: "+error.message,false);
+    show("phoneMsg","인증번호를 문자로 보냈습니다. 받은 6자리 번호를 입력해 주세요.");
+  };
+}
+
+if(verifyBtn){
+  verifyBtn.onclick=async()=>{
+    await session();
+    if(!user)return scrollToIdentity("먼저 회원가입 또는 카카오/이메일 로그인을 해 주세요.");
+    const phone=real8Phone(phoneInput.value);
+    const token=otpInput.value.trim();
+    if(!/^\d{6}$/.test(token))return show("phoneMsg","문자로 받은 6자리 인증번호를 입력해 주세요.",false);
+
+    const {error}=await db.auth.verifyOtp({phone,token,type:"phone_change"});
+    if(error)return show("phoneMsg","인증번호 확인 실패: "+error.message,false);
+
+    await db.auth.refreshSession();
+    await session();
+    if(!phoneVerified())return show("phoneMsg","인증은 처리되었지만 전화번호 확인 상태를 다시 확인해 주세요.",false);
+
+    const name=$("identityName")?.value.trim();
+    if(name){
+      try{await db.from("profiles").update({display_name:name}).eq("user_id",user.id);}catch(_e){}
+    }
+    show("phoneMsg","본인확인이 완료되었습니다. 이제 REAL8의 등록 기능을 이용할 수 있습니다.");
+    show("loginMsg","로그인 및 휴대폰 본인확인이 완료되었습니다.");
+  };
+}
+
 })();
