@@ -93,19 +93,18 @@ async function loadRules(){
 async function need(id){
   await session();
   if(!user){
-    show(id,"먼저 회원가입 또는 로그인해 주세요.",false);
+    show(id,"먼저 로그인해 주세요. 입력한 내용은 그대로 두고 로그인 후 다시 등록해 주세요.",false);
     return false;
   }
-  // NICE 계약 전에는 관리자만 개발 테스트 가능
+  // NICE 계약 전에는 관리자만 실제 등록 테스트 가능.
+  // 차단되더라도 현재 페이지/입력값은 유지한다.
   if(!niceEnabled()){
     if(isAdminUser()) return true;
-    show(id,"현재 NICE 본인확인 계약·연동 준비중입니다. 본인확인 서비스가 시작된 뒤 이용할 수 있습니다.",false);
-    scrollToIdentity("현재 NICE 계약 전입니다. 계약 및 연동 완료 후 본인확인을 진행해 주세요.");
+    show(id,"현재 NICE 본인확인 계약·연동 준비중이라 일반 회원의 실제 등록은 잠겨 있습니다. 입력 내용은 그대로 유지됩니다.",false);
     return false;
   }
   if(!identityVerified()){
-    show(id,"NICE 본인확인을 먼저 완료해 주세요.",false);
-    scrollToIdentity("로그인은 완료되었습니다. NICE 본인확인을 진행해 주세요.");
+    show(id,"NICE 본인확인을 완료한 회원만 등록할 수 있습니다. 입력 내용은 그대로 유지됩니다.",false);
     return false;
   }
   return true;
@@ -133,7 +132,7 @@ document.querySelectorAll(".go").forEach(b=>b.onclick=()=>{
 });
 
 /* 회원가입·로그인 */
-$("signupForm").onsubmit=async e=>{
+if($("signupForm")) $("signupForm").onsubmit=async e=>{
   e.preventDefault();
   sessionStorage.setItem("real8_login_provider","email");
   const memberId=normalizeMemberId($("signupMemberId").value);
@@ -157,7 +156,7 @@ $("signupForm").onsubmit=async e=>{
   if(data.session && !identityVerified() && niceEnabled()) scrollToIdentity("회원가입이 완료되었습니다. NICE 본인확인을 진행해 주세요.");
 };
 
-$("loginForm").onsubmit=async e=>{
+if($("loginForm")) $("loginForm").onsubmit=async e=>{
   e.preventDefault();
   sessionStorage.setItem("real8_login_provider","email");
   const {error}=await db.auth.signInWithPassword({
@@ -166,10 +165,14 @@ $("loginForm").onsubmit=async e=>{
   });
   if(error)return show("loginMsg",error.message,false);
   await session();
-  if(identityVerified()) show("loginMsg","로그인되었습니다. 본인확인도 완료된 회원입니다.");
-  else {
+  if(identityVerified()){
+    show("loginMsg","로그인되었습니다. 본인확인도 완료된 회원입니다.");
+  }else if(niceEnabled()){
     show("loginMsg","로그인되었습니다. NICE 본인확인을 완료해 주세요.");
-    scrollToIdentity("로그인은 완료되었습니다. NICE 본인확인을 진행해 주세요.");
+  }else{
+    show("loginMsg",isAdminUser()?
+      "로그인되었습니다. NICE 계약 전 관리자 개발 테스트 모드입니다.":
+      "로그인되었습니다. NICE 본인확인은 계약·연동 완료 후 사용할 수 있습니다.");
   }
 };
 
@@ -289,7 +292,7 @@ $("tradeType").onchange=()=>{
 };
 $("ownerClaim").onchange=()=>$("publicPriceWrap").classList.toggle("hidden",!$("ownerClaim").checked);
 
-$("tradeForm").onsubmit=async e=>{
+if($("tradeForm")) $("tradeForm").onsubmit=async e=>{
   e.preventDefault();
   if(!(await need("tradeMsg")))return;
   const type=$("tradeType").value;
@@ -715,10 +718,8 @@ async function loadMy(){
           ${x.public_price?`<div><b>공시가격</b> ${Number(x.public_price).toLocaleString()}원</div>`:""}
           ${x.record_hash?`<div class="hash">해시 ${esc(x.record_hash)}</div>`:""}
 
-          <button class="secondary editMyPost" data-id="${x.id}">
-            수정
-          </button>
-
+          <button class="secondary editMyPost" data-id="${x.id}" type="button">수정</button>
+          <div id="editPanel_${x.id}" class="hidden"></div>
           <div id="editMsg_${x.id}" class="msg"></div>
         </div>
       `;
@@ -766,67 +767,111 @@ async function loadMy(){
   }
 
   document.querySelectorAll(".editMyPost").forEach(b=>{
-    b.onclick=async()=>{
+    b.onclick=()=>{
       const id=b.dataset.id;
       const post=p.find(x=>String(x.id)===String(id));
       if(!post)return;
+      const panel=$("editPanel_"+id);
+      if(!panel)return;
+
+      if(!panel.classList.contains("hidden")){
+        panel.classList.add("hidden");
+        panel.innerHTML="";
+        b.textContent="수정";
+        return;
+      }
 
       const d={...(post.details_json||{})};
       const isTrade=TRADE_TYPES.includes(post.category);
-
-      let updateData={};
+      const currentCondition=post.transaction_side==="을"?(post.condition_b||""):(post.condition_a||"");
 
       if(isTrade){
-        const region=prompt("지역",post.region||""); if(region===null)return;
-        const address=prompt("부동산 주소",post.asset_address||""); if(address===null)return;
-        const price=prompt("희망 금액(원)",String(post.price||0)); if(price===null)return;
-        const area=prompt("면적/규모",d.area||""); if(area===null)return;
-        const period=prompt("희망 기간",d.period||""); if(period===null)return;
-        const currentCondition=post.transaction_side==="을"?(post.condition_b||""):(post.condition_a||"");
-        const condition=prompt("희망 조건",currentCondition); if(condition===null)return;
-        const content=prompt("추가 설명",post.content||""); if(content===null)return;
-        const contactName=prompt("연락처 이름",d.contact_name||""); if(contactName===null)return;
-        const contactPhone=prompt("연락처 전화",d.contact_phone||""); if(contactPhone===null)return;
-        const contactEmail=prompt("연락처 이메일",d.contact_email||""); if(contactEmail===null)return;
-
-        d.area=area.trim();
-        d.period=period.trim();
-        d.contact_name=contactName.trim();
-        d.contact_phone=contactPhone.trim();
-        d.contact_email=contactEmail.trim();
-
-        updateData={
-          region:region.trim(),
-          asset_address:address.trim(),
-          price:Number(String(price).replace(/,/g,"")||0),
-          content:content.trim(),
-          details_json:d
-        };
-        if(post.transaction_side==="을") updateData.condition_b=condition.trim();
-        else updateData.condition_a=condition.trim();
+        panel.innerHTML=`
+          <div class="panel" style="margin-top:12px">
+            <h3>등록 내용 수정</h3>
+            <label>지역<input id="er_${id}" value="${esc(post.region||"")}"></label>
+            <label>부동산 주소<input id="ea_${id}" value="${esc(post.asset_address||"")}"></label>
+            <label>희망 금액(원)<input id="ep_${id}" type="number" min="0" value="${Number(post.price||0)}"></label>
+            <label>면적/규모<input id="ear_${id}" value="${esc(d.area||"")}"></label>
+            <label>희망 기간<input id="eper_${id}" value="${esc(d.period||"")}"></label>
+            <label>희망 조건<textarea id="ec_${id}">${esc(currentCondition)}</textarea></label>
+            <label>추가 설명<textarea id="econ_${id}">${esc(post.content||"")}</textarea></label>
+            <label>연락처 이름<input id="ecn_${id}" value="${esc(d.contact_name||"")}"></label>
+            <label>연락처 전화<input id="ecp_${id}" type="tel" value="${esc(d.contact_phone||"")}"></label>
+            <label>연락처 이메일<input id="ece_${id}" type="email" value="${esc(d.contact_email||"")}"></label>
+            <button class="primary saveMyPost" data-id="${id}" type="button">수정 내용 저장</button>
+            <button class="secondary cancelMyPost" data-id="${id}" type="button">취소</button>
+          </div>`;
       }else{
-        const content=prompt("수정할 내용을 입력해 주세요.",post.content||"");
-        if(content===null)return;
-        if(!content.trim()){
-          show("editMsg_"+id,"내용을 입력해 주세요.",false);
-          return;
-        }
-        updateData={content:content.trim()};
+        panel.innerHTML=`
+          <div class="panel" style="margin-top:12px">
+            <h3>등록 내용 수정</h3>
+            <label>내용<textarea id="econ_${id}">${esc(post.content||"")}</textarea></label>
+            <button class="primary saveMyPost" data-id="${id}" type="button">수정 내용 저장</button>
+            <button class="secondary cancelMyPost" data-id="${id}" type="button">취소</button>
+          </div>`;
       }
 
-      const {error}=await db
-        .from("posts")
-        .update(updateData)
-        .eq("id",id)
-        .eq("author_id",user.id);
+      panel.classList.remove("hidden");
+      b.textContent="수정창 닫기";
 
-      show(
-        "editMsg_"+id,
-        error?error.message:"수정되었습니다.",
-        !error
-      );
+      panel.querySelector(".cancelMyPost").onclick=()=>{
+        panel.classList.add("hidden");
+        panel.innerHTML="";
+        b.textContent="수정";
+      };
 
-      if(!error) loadMy();
+      panel.querySelector(".saveMyPost").onclick=async()=>{
+        let updateData={};
+
+        if(isTrade){
+          const region=$("er_"+id).value.trim();
+          const address=$("ea_"+id).value.trim();
+          const price=Number($("ep_"+id).value||0);
+          const area=$("ear_"+id).value.trim();
+          const period=$("eper_"+id).value.trim();
+          const condition=$("ec_"+id).value.trim();
+          const content=$("econ_"+id).value.trim();
+          const contactName=$("ecn_"+id).value.trim();
+          const contactPhone=$("ecp_"+id).value.trim();
+          const contactEmail=$("ece_"+id).value.trim();
+
+          if(!region || !address || !contactName || !contactPhone || !contactEmail){
+            return show("editMsg_"+id,"지역·주소·연락처 이름·전화·이메일은 입력해 주세요.",false);
+          }
+
+          d.area=area;
+          d.period=period;
+          d.contact_name=contactName;
+          d.contact_phone=contactPhone;
+          d.contact_email=contactEmail;
+
+          updateData={
+            region,
+            asset_address:address,
+            price,
+            content,
+            details_json:d
+          };
+          if(post.transaction_side==="을") updateData.condition_b=condition;
+          else updateData.condition_a=condition;
+        }else{
+          const content=$("econ_"+id).value.trim();
+          if(!content)return show("editMsg_"+id,"내용을 입력해 주세요.",false);
+          updateData={content};
+        }
+
+        const {error}=await db
+          .from("posts")
+          .update(updateData)
+          .eq("id",id)
+          .eq("author_id",user.id);
+
+        if(error)return show("editMsg_"+id,"수정 오류: "+error.message,false);
+
+        show("editMsg_"+id,"수정되었습니다.");
+        await loadMy();
+      };
     };
   });
 
