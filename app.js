@@ -47,8 +47,7 @@ function statusBadge(x){
   return `<span class="badge ${s==="관리자 확인"?"":"wait"}">${esc(s)}</span>`;
 }
 function isAdminUser(){
-  return profile?.role==="admin" ||
-    (user?.email||"").toLowerCase()==="ljr0700@naver.com";
+  return profile?.role==="admin";
 }
 
 function phoneVerified(u=user){
@@ -238,16 +237,32 @@ async function uploadFile(input,folder){
   await session();
   if(!user)throw new Error("로그인이 필요합니다.");
   if(f.size>20*1024*1024)throw new Error("파일은 20MB 이하로 올려 주세요.");
+  const allowedTypes=new Set([
+    "image/jpeg","image/png","image/webp",
+    "application/pdf","video/mp4"
+  ]);
+  if(!allowedTypes.has(f.type)){
+    throw new Error("허용 파일: JPG, PNG, WebP, PDF, MP4");
+  }
   const safe=f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
   const path=`${user.id}/${folder}/${Date.now()}_${safe}`;
   const {error}=await db.storage.from("media").upload(path,f,{upsert:false});
   if(error)throw error;
   return db.storage.from("media").getPublicUrl(path).data.publicUrl;
 }
+function safeHttpUrl(v){
+  const s=String(v||"").trim();
+  if(!s)return "";
+  try{
+    const u=new URL(s,location.origin);
+    if(u.protocol!=="http:" && u.protocol!=="https:")return "";
+    return u.href;
+  }catch(_e){ return ""; }
+}
 function mediaHtml(x){
-  const d=x.details_json||{},url=d.file_url||d.link_url;
+  const d=x.details_json||{},url=safeHttpUrl(d.file_url||d.link_url);
   if(!url)return "";
-  return `<div class="media"><a href="${esc(url)}" target="_blank" rel="noopener">첨부 자료 열기</a></div>`;
+  return `<div class="media"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">첨부 자료 열기</a></div>`;
 }
 
 /* 거래 */
@@ -265,7 +280,13 @@ $("tradeForm").onsubmit=async e=>{
   const [pa,pb]=parties[type];
   const condition=$("tradeCondition").value.trim();
   const owner=$("ownerClaim").checked;
-  const details={area:$("tradeArea").value.trim(),period:$("tradePeriod").value.trim()};
+  const details={
+    area:$("tradeArea").value.trim(),
+    period:$("tradePeriod").value.trim(),
+    contact_name:$("tradeContactName").value.trim(),
+    contact_phone:$("tradeContactPhone").value.trim(),
+    contact_email:$("tradeContactEmail").value.trim()
+  };
   const {data,error}=await db.from("posts").insert({
     author_id:user.id,category:type,title:null,
     region:$("tradeRegion").value.trim(),
@@ -297,6 +318,7 @@ $("tradeForm").onsubmit=async e=>{
 
 $("matchBtn").onclick=loadMatches;
 async function loadMatches(){
+  await session();
   let q=db.from("posts").select("*").in("category",TRADE_TYPES).order("created_at",{ascending:false}).limit(150);
   const type=$("matchType").value;
   const region=$("matchRegion").value.trim().toLowerCase();
@@ -345,14 +367,28 @@ async function loadMatches(){
     const d=x.details_json||{};
     const side=x.transaction_side||"갑";
     const cond=side==="갑"?x.condition_a:x.condition_b;
+    const memberDetail=user ? `
+      <div><b>부동산 주소</b> ${esc(x.asset_address||"-")}</div>
+      <div><b>지역</b> ${esc(x.region||"-")}</div>
+      <div><b>희망 금액</b> ${Number(x.price||0).toLocaleString()}원</div>
+      <div><b>면적/규모</b> ${esc(d.area||"-")}</div>
+      <div><b>희망 기간</b> ${esc(d.period||"-")}</div>
+      <div><b>희망 조건</b> ${esc(cond||"-")}</div>
+      <div><b>추가 설명</b> ${esc(x.content||"-")}</div>
+      <div><b>연락처 이름</b> ${esc(d.contact_name||"-")}</div>
+      <div><b>연락처 전화</b> ${esc(d.contact_phone||"-")}</div>
+      <div><b>연락처 이메일</b> ${esc(d.contact_email||"-")}</div>
+      ${x.public_price?`<div><b>공시가격</b> ${Number(x.public_price).toLocaleString()}원</div>`:""}
+      ${x.record_hash?`<div class="hash"><b>해시</b> ${esc(x.record_hash)}</div>`:""}
+    ` : `<div class="msg error">상세 내용과 연락처는 로그인한 회원만 볼 수 있습니다.</div>`;
+
     return `<details class="item">
-<summary style="cursor:pointer;color:#d4af37;font-weight:bold;">상세 내용 보기 ▼</summary>
-      <b>${esc(x.category)} · ${esc(side==="갑"?x.party_a_label:x.party_b_label)}</b>
+      <summary style="cursor:pointer;color:#d4af37;font-weight:bold;">
+        ${esc(x.category)} · ${esc(x.region||"-")} · ${Number(x.price||0).toLocaleString()}원 — 상세 내용 보기 ▼
+      </summary>
       ${statusBadge(x)}
-      <div>${esc(cond||x.content||"-")}</div>
-      <div class="meta">지역 ${esc(x.region||"-")} / 금액 ${Number(x.price||0).toLocaleString()}원 / 면적 ${esc(d.area||"-")}</div>
- </div>
-</details>`;  
+      ${memberDetail}
+    </details>`;
   }).join("")||"조건에 가까운 등록정보가 없습니다.";
 }
 
@@ -608,7 +644,7 @@ async function loadMy(){
     : "";
 
   $("profileBox").innerHTML=`
-  <b>${esc(user.user_metadata?.display_name||user.user_metadata?.name||profile?.display_name||user.email)}</b>
+    <b>${esc(profile?.display_name||user.user_metadata?.display_name||user.user_metadata?.name||user.email||"회원")}</b><br>
     <span class="badge">로그인 연결: ${esc(providerText)}</span>
     ${emailLine}
     ${user.phone?'<br><span class="badge">휴대폰 번호 확인 완료</span>':'<br><span class="badge wait">휴대폰 번호 확인 필요</span>'}
@@ -647,16 +683,18 @@ async function loadMy(){
           <b>${esc(x.category)}${x.title?` · ${esc(x.title)}`:""}</b>
           ${statusBadge(x)}
 
-          <div class="meta">
-            ${x.asset_address?`주소 ${esc(x.asset_address)} / `:""}
-            ${x.region?`지역 ${esc(x.region)} / `:""}
-            ${Number(x.price||0)?`금액 ${Number(x.price||0).toLocaleString()}원 / `:""}
-            ${new Date(x.created_at).toLocaleString("ko-KR")}
-          </div>
-
-          <div>${esc(condition||x.content||"")}</div>
-
-          ${d.area?`<div class="meta">면적 ${esc(d.area)}</div>`:""}
+          <div class="meta">${new Date(x.created_at).toLocaleString("ko-KR")}</div>
+          ${x.asset_address?`<div><b>주소</b> ${esc(x.asset_address)}</div>`:""}
+          ${x.region?`<div><b>지역</b> ${esc(x.region)}</div>`:""}
+          ${Number(x.price||0)?`<div><b>금액</b> ${Number(x.price||0).toLocaleString()}원</div>`:""}
+          ${d.area?`<div><b>면적/규모</b> ${esc(d.area)}</div>`:""}
+          ${d.period?`<div><b>희망 기간</b> ${esc(d.period)}</div>`:""}
+          ${condition?`<div><b>희망 조건</b> ${esc(condition)}</div>`:""}
+          ${x.content?`<div><b>추가 설명</b> ${esc(x.content)}</div>`:""}
+          ${d.contact_name?`<div><b>연락처 이름</b> ${esc(d.contact_name)}</div>`:""}
+          ${d.contact_phone?`<div><b>연락처 전화</b> ${esc(d.contact_phone)}</div>`:""}
+          ${d.contact_email?`<div><b>연락처 이메일</b> ${esc(d.contact_email)}</div>`:""}
+          ${x.public_price?`<div><b>공시가격</b> ${Number(x.public_price).toLocaleString()}원</div>`:""}
           ${x.record_hash?`<div class="hash">해시 ${esc(x.record_hash)}</div>`:""}
 
           <button class="secondary editMyPost" data-id="${x.id}">
@@ -715,20 +753,52 @@ async function loadMy(){
       const post=p.find(x=>String(x.id)===String(id));
       if(!post)return;
 
-      const current=post.content||"";
-      const updated=prompt("수정할 내용을 입력해 주세요.",current);
+      const d={...(post.details_json||{})};
+      const isTrade=TRADE_TYPES.includes(post.category);
 
-      if(updated===null)return;
+      let updateData={};
 
-      const text=updated.trim();
-      if(!text){
-        show("editMsg_"+id,"내용을 입력해 주세요.",false);
-        return;
+      if(isTrade){
+        const region=prompt("지역",post.region||""); if(region===null)return;
+        const address=prompt("부동산 주소",post.asset_address||""); if(address===null)return;
+        const price=prompt("희망 금액(원)",String(post.price||0)); if(price===null)return;
+        const area=prompt("면적/규모",d.area||""); if(area===null)return;
+        const period=prompt("희망 기간",d.period||""); if(period===null)return;
+        const currentCondition=post.transaction_side==="을"?(post.condition_b||""):(post.condition_a||"");
+        const condition=prompt("희망 조건",currentCondition); if(condition===null)return;
+        const content=prompt("추가 설명",post.content||""); if(content===null)return;
+        const contactName=prompt("연락처 이름",d.contact_name||""); if(contactName===null)return;
+        const contactPhone=prompt("연락처 전화",d.contact_phone||""); if(contactPhone===null)return;
+        const contactEmail=prompt("연락처 이메일",d.contact_email||""); if(contactEmail===null)return;
+
+        d.area=area.trim();
+        d.period=period.trim();
+        d.contact_name=contactName.trim();
+        d.contact_phone=contactPhone.trim();
+        d.contact_email=contactEmail.trim();
+
+        updateData={
+          region:region.trim(),
+          asset_address:address.trim(),
+          price:Number(String(price).replace(/,/g,"")||0),
+          content:content.trim(),
+          details_json:d
+        };
+        if(post.transaction_side==="을") updateData.condition_b=condition.trim();
+        else updateData.condition_a=condition.trim();
+      }else{
+        const content=prompt("수정할 내용을 입력해 주세요.",post.content||"");
+        if(content===null)return;
+        if(!content.trim()){
+          show("editMsg_"+id,"내용을 입력해 주세요.",false);
+          return;
+        }
+        updateData={content:content.trim()};
       }
 
       const {error}=await db
         .from("posts")
-        .update({content:text})
+        .update(updateData)
         .eq("id",id)
         .eq("author_id",user.id);
 
