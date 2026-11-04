@@ -34,6 +34,12 @@ function numberFromText(v){
   const m=String(v||"").replace(/,/g,"").match(/[\d.]+/);
   return m?Number(m[0]):0;
 }
+function normalizeMemberId(v){
+  return String(v||"").trim().toLowerCase();
+}
+function validMemberId(v){
+  return /^[a-z0-9_]{4,20}$/.test(normalizeMemberId(v));
+}
 function statusLabel(x){
   if(x?.owner_verified)return "관리자 확인";
   const s=String(x?.status||"등록");
@@ -50,8 +56,11 @@ function isAdminUser(){
   return profile?.role==="admin";
 }
 
-function phoneVerified(u=user){
-  return Boolean(u?.phone);
+function identityVerified(){
+  return profile?.identity_verified===true;
+}
+function niceEnabled(){
+  return window.REAL8_NICE?.enabled===true && Boolean(window.REAL8_NICE?.startUrl);
 }
 function providerName(u=user){
   const primary=u?.app_metadata?.provider||"";
@@ -74,8 +83,6 @@ async function session(){
   if(user){
     const {data,error}=await db.from("profiles").select("*").eq("user_id",user.id).maybeSingle();
     if(!error)profile=data;
-    const n=user.user_metadata?.display_name||user.user_metadata?.name||profile?.display_name||"";
-    if($("identityName") && !$("identityName").value) $("identityName").value=n;
   }
   return user;
 }
@@ -89,9 +96,16 @@ async function need(id){
     show(id,"먼저 회원가입 또는 로그인해 주세요.",false);
     return false;
   }
-  if(!phoneVerified()){
-    show(id,"휴대폰 번호 확인을 먼저 완료해 주세요.",false);
-    scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.`);
+  // NICE 계약 전에는 관리자만 개발 테스트 가능
+  if(!niceEnabled()){
+    if(isAdminUser()) return true;
+    show(id,"현재 NICE 본인확인 계약·연동 준비중입니다. 본인확인 서비스가 시작된 뒤 이용할 수 있습니다.",false);
+    scrollToIdentity("현재 NICE 계약 전입니다. 계약 및 연동 완료 후 본인확인을 진행해 주세요.");
+    return false;
+  }
+  if(!identityVerified()){
+    show(id,"NICE 본인확인을 먼저 완료해 주세요.",false);
+    scrollToIdentity("로그인은 완료되었습니다. NICE 본인확인을 진행해 주세요.");
     return false;
   }
   return true;
@@ -122,22 +136,25 @@ document.querySelectorAll(".go").forEach(b=>b.onclick=()=>{
 $("signupForm").onsubmit=async e=>{
   e.preventDefault();
   sessionStorage.setItem("real8_login_provider","email");
+  const memberId=normalizeMemberId($("signupMemberId").value);
+  if(!validMemberId(memberId))
+    return show("signupMsg","회원 ID는 영문 소문자·숫자·_만 사용하여 4~20자로 입력해 주세요.",false);
   if($("signupPassword").value!==$("signupPassword2").value)
     return show("signupMsg","비밀번호가 서로 다릅니다.",false);
   const {data,error}=await db.auth.signUp({
     email:$("signupEmail").value.trim(),
     password:$("signupPassword").value,
     options:{
-      data:{display_name:$("signupName").value.trim()},
+      data:{display_name:$("signupName").value.trim(),member_id:memberId},
       emailRedirectTo:location.href.split("#")[0]
     }
   });
   if(error)return show("signupMsg",error.message,false);
   show("signupMsg",data.session?
-    "회원가입이 완료되었습니다. 이제 휴대폰 번호 확인을 진행해 주세요.":
-    "회원가입이 접수되었습니다. 이메일 확인 링크를 누르고 로그인한 뒤 휴대폰 번호 확인을 진행해 주세요.");
+    "회원가입이 완료되었습니다. 이메일 확인 후 로그인해 주세요. NICE 본인확인은 계약·연동 완료 후 사용할 수 있습니다.":
+    "회원가입이 접수되었습니다. 이메일 확인 링크를 누른 뒤 로그인해 주세요. NICE 본인확인은 계약·연동 완료 후 사용할 수 있습니다.");
   await session();
-  if(data.session && !phoneVerified()) scrollToIdentity("회원가입이 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.");
+  if(data.session && !identityVerified() && niceEnabled()) scrollToIdentity("회원가입이 완료되었습니다. NICE 본인확인을 진행해 주세요.");
 };
 
 $("loginForm").onsubmit=async e=>{
@@ -149,10 +166,10 @@ $("loginForm").onsubmit=async e=>{
   });
   if(error)return show("loginMsg",error.message,false);
   await session();
-  if(phoneVerified()) show("loginMsg","로그인되었습니다. 휴대폰 번호 확인도 완료된 회원입니다.");
+  if(identityVerified()) show("loginMsg","로그인되었습니다. 본인확인도 완료된 회원입니다.");
   else {
-    show("loginMsg","로그인되었습니다. 휴대폰 번호 확인을 완료해 주세요.");
-    scrollToIdentity("로그인은 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.");
+    show("loginMsg","로그인되었습니다. NICE 본인확인을 완료해 주세요.");
+    scrollToIdentity("로그인은 완료되었습니다. NICE 본인확인을 진행해 주세요.");
   }
 };
 
@@ -174,9 +191,9 @@ db.auth.onAuthStateChange((event,newSession)=>{
   if(event==="SIGNED_IN" || event==="INITIAL_SESSION" || event==="USER_UPDATED"){
     setTimeout(async()=>{
       await session();
-      if(user && !phoneVerified() && event!=="USER_UPDATED"){
-        show("loginMsg",`${providerName()} 로그인되었습니다. 휴대폰 번호 확인을 완료해 주세요.`);
-        scrollToIdentity(`${providerName()} 로그인은 완료되었습니다. 휴대폰 번호 확인을 진행해 주세요.`);
+      if(user && niceEnabled() && !identityVerified() && event!=="USER_UPDATED"){
+        show("loginMsg",`${providerName()} 로그인되었습니다. NICE 본인확인을 완료해 주세요.`);
+        scrollToIdentity("로그인은 완료되었습니다. NICE 본인확인을 진행해 주세요.");
       }
     },0);
   }
@@ -217,7 +234,7 @@ $("logoutBtn").onclick=async()=>{
   $("myActivity").textContent="";
   show("loginMsg","");
 };
-// 카카오 로그인: 처음 로그인한 회원은 돌아온 뒤 휴대폰 본인확인을 진행합니다.
+// 소셜 로그인 사용 시에도 NICE 본인확인은 별도 절차로 진행합니다.
 async function loginWithKakao(){
   sessionStorage.setItem("real8_login_provider","kakao");
   show("loginMsg","카카오 로그인 화면으로 이동합니다.");
@@ -646,8 +663,9 @@ async function loadMy(){
   $("profileBox").innerHTML=`
     <b>${esc(profile?.display_name||user.user_metadata?.display_name||user.user_metadata?.name||user.email||"회원")}</b><br>
     <span class="badge">로그인 연결: ${esc(providerText)}</span>
+    ${profile?.member_id?`<div class="meta">회원 ID ${esc(profile.member_id)}</div>`:""}
     ${emailLine}
-    ${user.phone?'<br><span class="badge">휴대폰 번호 확인 완료</span>':'<br><span class="badge wait">휴대폰 번호 확인 필요</span>'}
+    ${identityVerified()?'<br><span class="badge">본인확인 완료</span>':'<br><span class="badge wait">본인확인 필요</span>'}
     ${isAdminUser()?'<br><span class="badge">관리자</span>':""}`;
 
   const [rr,pp,parts]=await Promise.all([
@@ -915,7 +933,7 @@ property_coin_per_100m:Number($("rulePropertyCoin")?.value||rules.property_coin_
 $("tradeType").dispatchEvent(new Event("change"));
 session();
 loadRules();
-// 휴대폰 번호 확인: 현재 로그인된 같은 회원 계정에 SMS OTP로 전화번호 소유 여부를 확인합니다.
+// 기존 SMS OTP 코드는 UI에서 비활성화됨. NICE 본인확인 연동 후 교체 예정.
 const phoneInput=$("phoneNumber");
 const otpInput=$("phoneOtp");
 const sendBtn=$("sendOtpBtn");
@@ -966,7 +984,7 @@ if(verifyBtn){
 
     const name=$("identityName")?.value.trim();
     if(name){
-      try{await db.from("profiles").update({display_name:name}).eq("user_id",user.id);}catch(_e){}
+      try{await db.rpc("update_my_display_name",{p_display_name:name});}catch(_e){}
     }
     show("phoneMsg","휴대폰 번호 확인이 완료되었습니다. 이제 REAL8의 등록 기능을 이용할 수 있습니다.");
     show("loginMsg","로그인 및 휴대폰 번호 확인이 완료되었습니다.");
