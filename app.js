@@ -838,11 +838,20 @@ async function loadAdmin(){
     token_per_coin:"기본 전환율",coin_display_value:"COIN 표시값",
     property_coin_per_100m:"공시가격 1억 원당 COIN"
   };
-  const formatRule=(field,value)=>{
-    if(field!=="trade_rules")return value;
-    try{return Object.entries(JSON.parse(value)).map(([category,rule])=>
-      `${category} ${Number(rule.amount)} ${rule.unit}`).join(" · ");
-    }catch{return value;}
+  const formatRuleChanges=(entry)=>{
+    if(entry.field_name!=="trade_rules")
+      return [`${entry.old_value ?? "미설정"} → ${entry.new_value ?? "미설정"}`];
+    const decode=value=>{
+      for(let pass=0;typeof value==="string" && pass<2;pass++)value=JSON.parse(value);
+      return value||{};
+    };
+    try{
+      const before=decode(entry.old_value), after=decode(entry.new_value);
+      const display=rule=>rule?`${rule.amount} ${rule.unit}`:"미설정";
+      return [...new Set([...Object.keys(before),...Object.keys(after)])]
+        .filter(key=>display(before[key])!==display(after[key]))
+        .map(key=>`${key} ${display(before[key])} → ${display(after[key])}`);
+    }catch{return ["이전 형식의 변경 기록입니다."];}
   };
   const [hist,owners]=await Promise.all([
     db.from("reward_rule_history_v4").select("*").order("changed_at",{ascending:false}).limit(500),
@@ -850,9 +859,9 @@ async function loadAdmin(){
   ]);
 
  if($("ruleHistory") && hist.error) $("ruleHistory").textContent="변경 이력을 불러오지 못했습니다.";
- else if($("ruleHistory")) $("ruleHistory").innerHTML=(hist.data||[]).filter(x=>x.old_value!==x.new_value).map(x=>`
+ else if($("ruleHistory")) $("ruleHistory").innerHTML=(hist.data||[]).map(x=>({x,changes:formatRuleChanges(x)})).filter(({x,changes})=>x.old_value!==x.new_value && changes.length).map(({x,changes})=>`
     <div class="item"><b>${esc(ruleLabels[x.field_name]||x.field_name)}</b>
-    <div>${esc(formatRule(x.field_name,x.old_value))} → ${esc(formatRule(x.field_name,x.new_value))}</div>
+    ${changes.map(change=>`<div>${esc(change)}</div>`).join("")}
     <div class="meta">${new Date(x.changed_at).toLocaleString("ko-KR")}</div></div>
   `).join("")||"변경 이력이 없습니다.";
 

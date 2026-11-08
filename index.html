@@ -243,8 +243,8 @@
       <p>관리자에게만 표시됩니다.</p>
     </div>
 
-    <div class="cols">
-      <div class="panel">
+    <div class="cols" style="grid-template-columns:repeat(auto-fit,minmax(min(100%, 320px),1fr))">
+      <div class="panel" style="min-width:0">
         <h3>보상 기준</h3>
         <form id="rewardRuleForm">
           <div id="tradeRuleInputs"></div>
@@ -261,7 +261,7 @@
         <div id="adminMsg" class="msg" aria-live="polite"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" style="min-width:0;overflow-wrap:anywhere">
         <h3>변경 이력</h3>
         <div id="ruleHistory" class="list"></div>
       </div>
@@ -278,6 +278,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./supabase-config.js"></script>
 
-<script src="./app.js?v=20261108-release1"></script>
+<script src="./app.js?v=20261108-admin-display"></script>
 </body>
 </html>
