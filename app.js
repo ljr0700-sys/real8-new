@@ -256,6 +256,8 @@ function opinionForm(post){
   if(post.author_id===user?.id)return "";
   return `<form class="participate postOpinion" data-id="${esc(post.id)}">
     <label>참여 의견 (등록 회원에게만 전달)<textarea name="opinion" required maxlength="2000"></textarea></label>
+    <label>회신 연락처 (선택)<input name="replyContact" maxlength="254" placeholder="전화번호 또는 이메일"></label>
+    <p class="note">입력한 연락처는 이 글을 등록한 회원에게만 전달됩니다.</p>
     <button class="secondary" type="submit">의견 등록</button>
     <div class="msg" role="status"></div>
   </form>`;
@@ -270,9 +272,12 @@ function bindOpinions(listId){
       if(!input.value.trim())return;
       button.disabled=true;
       try{
-        const {error}=await db.rpc("real8_submit_opinion",{p_post_id:form.dataset.id,p_content:input.value.trim()});
+        const {error}=await db.rpc("real8_submit_opinion_with_contact",{
+          p_post_id:form.dataset.id,p_content:input.value.trim(),
+          p_reply_contact:form.elements.replyContact.value.trim()||null
+        });
         status.textContent=error?error.message:"의견이 등록 회원에게 전달됐습니다.";
-        if(!error)input.value="";
+        if(!error)form.reset();
       }finally{button.disabled=false;}
     };
   });
@@ -751,10 +756,13 @@ async function loadMy(){
       if(!panel.open||user?.id!==accountId)return;
       const output=panel.querySelector('[role="status"]');
       output.textContent="불러오는 중입니다.";
-      const {data,error}=await db.rpc("real8_read_opinions",{p_post_ids:[panel.dataset.id]});
+      const {data,error}=await db.rpc("real8_received_opinions",{p_post_id:panel.dataset.id});
       if(user?.id!==accountId)return;
       output.innerHTML=error?"의견을 불러오지 못했습니다. 다시 열어 주세요.":
-        (data||[]).map(row=>`<div class="meta">${esc(row.content)}</div>`).join("")||"받은 의견이 없습니다.";
+        (data||[]).map(row=>`<div class="item">
+          <div>${esc(row.content)}</div>
+          <div class="meta">회신 연락처 · ${esc(row.reply_contact||"미제공")}</div>
+        </div>`).join("")||"받은 의견이 없습니다.";
     };
   });
 
