@@ -60,23 +60,25 @@
   <div id="homeAuth" class="auth-grid">
     <div class="panel">
       <h2>로그인</h2>
-      <p class="note">현재는 이메일로 로그인합니다. 회원 ID는 회원 식별용으로 저장되며, ID 로그인은 서버 연동 단계에서 추가합니다.</p>
+      <p class="note">이메일·비밀번호 또는 카카오로 로그인합니다.</p>
       <form id="loginForm">
         <label>이메일<input id="loginEmail" type="email" autocomplete="email" required></label>
         <label>비밀번호<input id="loginPassword" type="password" autocomplete="current-password" required></label>
         <button class="primary" type="submit">이메일 로그인</button>
         <button class="textbtn" type="button" id="resetPasswordBtn">비밀번호 재설정 이메일 받기</button>
       </form>
+      <button id="kakaoLoginBtn" type="button" class="secondary">카카오로 가입·로그인</button>
       <div id="loginMsg" class="msg" aria-live="polite"></div>
     </div>
 
     <div class="panel">
       <h2>회원가입</h2>
-      <p class="note">회원 ID·이메일·비밀번호로 가입하고 이메일을 확인합니다.</p>
+      <p class="note">가입 이메일을 확인해 주세요. 휴대폰 번호는 선택 입력이며 문자 인증은 없습니다.</p>
       <form id="signupForm">
         <label>회원 ID<input id="signupMemberId" autocomplete="username" minlength="4" maxlength="20" placeholder="영문 소문자·숫자·_ 4~20자" required></label>
         <label>이름<input id="signupName" autocomplete="name" required></label>
         <label>이메일<input id="signupEmail" type="email" autocomplete="email" required></label>
+        <label>휴대폰 번호 (선택)<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="010-1234-5678"></label>
         <label>비밀번호<input id="signupPassword" type="password" minlength="8" autocomplete="new-password" required></label>
         <label>비밀번호 확인<input id="signupPassword2" type="password" minlength="8" autocomplete="new-password" required></label>
         <label class="check"><input id="agreeTerms" type="checkbox" required> 이용약관·개인정보 처리방침에 동의합니다.</label>
@@ -136,7 +138,7 @@
 
     <div class="panel">
       <h3>내 조건에 가까운 목록</h3>
-      <label>거래 종류<select id="matchType"><option value="">전체</option><option>건축</option><option>매매</option><option>전세</option><option>월세</option><option>렌트</option><option>바꿔살기</option><option>펜션</option></select></label>
+      <label>검색 종류<select id="matchType"><option value="">전체</option><option>가상건축</option><option value="culture">거주문화 전체</option><option>건축</option><option>매매</option><option>전세</option><option>월세</option><option>렌트</option><option>바꿔살기</option><option>펜션</option></select></label>
       <label>지역<input id="matchRegion"></label>
       <label>희망 금액(원)<input id="matchPrice" inputmode="numeric"></label>
       <label>희망 면적<input id="matchArea"></label>
@@ -278,6 +280,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./supabase-config.js"></script>
 
-<script src="./app.js?v=20261108-admin-display"></script>
+<script src="./app.js?v=20261109-member-search"></script>
 </body>
 </html>

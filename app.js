@@ -116,18 +116,24 @@ $("signupForm").onsubmit=async e=>{
   e.preventDefault();
   if($("signupPassword").value!==$("signupPassword2").value)
     return show("signupMsg","비밀번호가 서로 다릅니다.",false);
+  const memberId=$("signupMemberId").value.trim().toLowerCase();
+  if(!/^[a-z0-9_]{4,20}$/.test(memberId))
+    return show("signupMsg","회원 ID는 영문 소문자, 숫자, 밑줄로 4~20자 입력해 주세요.",false);
+  const contactPhone=$("signupPhone").value.trim().replace(/[\s-]/g,"").replace(/^\+82/,"0");
+  if(contactPhone && !/^010\d{8}$/.test(contactPhone))
+    return show("signupMsg","휴대폰 번호는 010으로 시작하는 11자리로 입력해 주세요.",false);
   const {data,error}=await db.auth.signUp({
     email:$("signupEmail").value.trim(),
     password:$("signupPassword").value,
     options:{
-      data:{display_name:$("signupName").value.trim()},
+      data:{display_name:$("signupName").value.trim(),member_id:memberId,...(contactPhone?{contact_phone:contactPhone}:{})},
       emailRedirectTo:location.href.split("#")[0]
     }
   });
   if(error)return show("signupMsg",error.message,false);
   show("signupMsg",data.session?
-    "회원가입이 완료되었습니다. 이제 휴대폰 본인확인을 진행해 주세요.":
-    "회원가입이 접수되었습니다. 이메일 확인 링크를 누르고 로그인한 뒤 휴대폰 본인확인을 진행해 주세요.");
+    "회원가입이 완료되었습니다.":
+    "회원가입이 접수되었습니다. 가입 이메일의 확인 링크를 누른 뒤 로그인해 주세요.");
   await session();
   if(data.session && !canContribute()) scrollToIdentity("가입 이메일을 확인해 주세요.");
 };
@@ -204,7 +210,7 @@ $("logoutBtn").onclick=async()=>{
   $("myActivity").textContent="";
   show("loginMsg","");
 };
-// 카카오 로그인: 처음 로그인한 회원은 돌아온 뒤 휴대폰 본인확인을 진행합니다.
+// 첫 카카오 로그인으로 회원 계정도 생성됩니다.
 async function loginWithKakao(){
   show("loginMsg","카카오 로그인 화면으로 이동합니다.");
   const {error}=await db.auth.signInWithOAuth({
@@ -249,23 +255,12 @@ function contactHtml(details,own=false){
 function opinionForm(post){
   if(post.author_id===user?.id)return "";
   return `<form class="participate postOpinion" data-id="${esc(post.id)}">
-    <label>참여 의견 (로그인 회원에게 공개)<textarea name="opinion" required maxlength="2000"></textarea></label>
+    <label>참여 의견 (등록 회원에게만 전달)<textarea name="opinion" required maxlength="2000"></textarea></label>
     <button class="secondary" type="submit">의견 등록</button>
     <div class="msg" role="status"></div>
   </form>`;
 }
 function bindOpinions(listId){
-  const panels=[...$(listId).querySelectorAll(".postOpinions")];
-  const showOpinions=async()=>{
-    if(!panels.length)return;
-    const {data,error}=await db.rpc("real8_read_opinions",{p_post_ids:panels.map(panel=>panel.dataset.id)});
-    if(error)return;
-    for(const panel of panels){
-      panel.innerHTML=(data||[]).filter(row=>row.post_id===panel.dataset.id)
-        .map(row=>`<div class="meta">회원 의견 · ${esc(row.content)}</div>`).join("");
-    }
-  };
-  showOpinions();
   $(listId).querySelectorAll(".postOpinion").forEach(form=>{
     form.onsubmit=async event=>{
       event.preventDefault();
@@ -276,8 +271,8 @@ function bindOpinions(listId){
       button.disabled=true;
       try{
         const {error}=await db.rpc("real8_submit_opinion",{p_post_id:form.dataset.id,p_content:input.value.trim()});
-        status.textContent=error?error.message:"의견이 저장되고 보상이 처리되었습니다.";
-        if(!error){input.value="";showOpinions();}
+        status.textContent=error?error.message:"의견이 등록 회원에게 전달됐습니다.";
+        if(!error)input.value="";
       }finally{button.disabled=false;}
     };
   });
@@ -329,7 +324,7 @@ $("matchBtn").onclick=loadMatches;
 async function loadMatches(){
   await session();
   if(!user)return $("matchList").textContent="로그인 후 목록을 볼 수 있습니다.";
-  let q=db.from("posts").select("*").in("category",TRADE_TYPES).order("created_at",{ascending:false}).limit(150);
+  let q=db.from("posts").select("*").order("created_at",{ascending:false}).limit(150);
   const type=$("matchType").value;
   const region=$("matchRegion").value.trim().toLowerCase();
   const price=Number($("matchPrice").value||0);
@@ -337,7 +332,10 @@ async function loadMatches(){
 
 
 
-  if(type)q=q.eq("category",type);
+  const cultureTypes=[...new Set(CULTURE_TYPES.flatMap(category=>[category,category.trim()]))];
+  if(type==="culture")q=q.in("category",cultureTypes);
+  else if(type)q=q.eq("category",type);
+  else q=q.in("category",[...TRADE_TYPES,"가상건축",...cultureTypes]);
 
   const {data,error}=await q;
   if(error)return $("matchList").textContent=error.message;
@@ -351,13 +349,13 @@ async function loadMatches(){
       else if(xr.includes(region)||region.includes(xr))score+=60;
       else score-=80;
     }
-    if(price){
-      const xp=Number(x.price||0);
+    if(price && (TRADE_TYPES.includes(x.category)||x.category==="가상건축")){
+      const xp=x.category==="가상건축"?numberFromText(d.budget):Number(x.price||0);
       const diff=Math.abs(xp-price)/Math.max(price,1);
       score+=Math.max(0,60-diff*60);
     }
     if(area){
-      const xa=numberFromText(d.area);
+      const xa=numberFromText(d.area||d.scale);
       if(xa){
         const diff=Math.abs(xa-area)/Math.max(area,1);
         score+=Math.max(0,40-diff*40);
@@ -372,6 +370,19 @@ async function loadMatches(){
 
   $("matchList").innerHTML=rows.map(x=>{
     const d=x.details_json||{};
+    if(!TRADE_TYPES.includes(x.category)){
+      const virtual=x.category==="가상건축";
+      return `<details class="item">
+        <summary>${esc(virtual?"가상건축":"거주문화 · "+x.category)} · ${esc(x.title||x.region||"상세 보기")}</summary>
+        ${statusBadge(x)}
+        <div class="meta">지역 ${esc(x.region||"-")}</div>
+        ${virtual?`<div class="meta">목적 ${esc(d.purpose||"-")} / 규모 ${esc(d.scale||"-")} / 예산 ${esc(d.budget||"-")}</div>`:""}
+        <div>${esc(x.content||"")}</div>
+        ${mediaHtml(x)}
+        ${contactHtml(d)}
+        ${opinionForm(x)}
+      </details>`;
+    }
     const side=x.transaction_side||"갑";
     const cond=side==="갑"?x.condition_a:x.condition_b;
     return `<details class="item">
@@ -383,7 +394,6 @@ async function loadMatches(){
       <div class="meta">주소 ${esc(x.asset_address||"-")} / 희망 기간 ${esc(d.period||"-")}</div>
       ${x.content&&x.content!==cond?`<div>${esc(x.content)}</div>`:""}
       ${contactHtml(d)}
-      <div class="postOpinions" data-id="${esc(x.id)}"></div>
       ${opinionForm(x)}
 </details>`;  
   }).join("")||"조건에 가까운 등록정보가 없습니다.";
@@ -473,7 +483,6 @@ async function loadVirtual(){
       <div>${esc(x.content||"")}</div>
       ${mediaHtml(x)}
       ${contactHtml(x.details_json||{})}
-      <div class="postOpinions" data-id="${esc(x.id)}"></div>
       ${opinionForm(x)}
     </div>`;
   }).join("")||"조건에 맞는 제안이 없습니다.";
@@ -543,7 +552,6 @@ async function loadCulture(){
       <div>${esc(x.content||"")}</div>
       ${mediaHtml(x)}
       ${contactHtml(x.details_json||{})}
-      <div class="postOpinions" data-id="${esc(x.id)}"></div>
       ${opinionForm(x)}
     </div>
   `).join("")||"조건에 가까운 다른 회원의 정보가 없습니다.";
@@ -672,6 +680,10 @@ async function loadMy(){
           ${mediaHtml(x)}
           ${x.record_hash?`<div class="hash">해시 ${esc(x.record_hash)}</div>`:""}
 
+          <details class="receivedOpinions" data-id="${esc(x.id)}">
+            <summary>받은 의견 보기</summary>
+            <div class="list" role="status"></div>
+          </details>
           <button class="secondary editMyPost" data-id="${x.id}">
             수정
           </button>
@@ -733,6 +745,18 @@ async function loadMy(){
       </div>
     `).join("")||"아직 참여 기록이 없습니다.";
   }
+
+  $("myPosts").querySelectorAll(".receivedOpinions").forEach(panel=>{
+    panel.ontoggle=async()=>{
+      if(!panel.open||user?.id!==accountId)return;
+      const output=panel.querySelector('[role="status"]');
+      output.textContent="불러오는 중입니다.";
+      const {data,error}=await db.rpc("real8_read_opinions",{p_post_ids:[panel.dataset.id]});
+      if(user?.id!==accountId)return;
+      output.innerHTML=error?"의견을 불러오지 못했습니다. 다시 열어 주세요.":
+        (data||[]).map(row=>`<div class="meta">${esc(row.content)}</div>`).join("")||"받은 의견이 없습니다.";
+    };
+  });
 
   document.querySelectorAll(".editMyPost").forEach(b=>{
     b.onclick=async()=>{
