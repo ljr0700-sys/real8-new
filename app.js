@@ -257,7 +257,7 @@ function opinionForm(post){
   return `<form class="participate postOpinion" data-id="${esc(post.id)}">
     <label>참여 의견 (등록 회원에게만 전달)<textarea name="opinion" required maxlength="2000"></textarea></label>
     <label>회신 연락처 (선택)<input name="replyContact" maxlength="254" placeholder="전화번호 또는 이메일"></label>
-    <p class="note">입력한 연락처는 이 글을 등록한 회원에게만 전달됩니다.</p>
+    <p class="note">작성자는 마이페이지의 해당 글에서 의견과 회신 연락처를 확인할 수 있습니다. 문자 알림은 발송되지 않습니다.</p>
     <button class="secondary" type="submit">의견 등록</button>
     <div class="msg" role="status"></div>
   </form>`;
@@ -276,8 +276,10 @@ function bindOpinions(listId){
           p_post_id:form.dataset.id,p_content:input.value.trim(),
           p_reply_contact:form.elements.replyContact.value.trim()||null
         });
-        status.textContent=error?error.message:"의견이 등록 회원에게 전달됐습니다.";
+        status.textContent=error?error.message:"의견이 저장됐습니다. 글 작성자는 마이페이지의 ‘받은 의견 보기’에서 확인할 수 있습니다.";
         if(!error)form.reset();
+      }catch{
+        status.textContent="의견을 저장하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.";
       }finally{button.disabled=false;}
     };
   });
@@ -583,7 +585,7 @@ async function loadRewards(){
   const {data,error}=await db.rpc("real8_reward_totals");
   const summary=data?.[0];
   $("dynamicRewardSummary").textContent=error||!summary?"현재 전환율을 확인하지 못했습니다.":
-    `현재 전환율 ${Number(summary.token_per_coin).toLocaleString()} TOKEN = 1 COIN. 누적 발행 TOKEN ${Number(summary.issued_tokens).toLocaleString()}, COIN ${Number(summary.issued_coins).toLocaleString()}.`;
+    `현재 전환율 ${Number(summary.token_per_coin).toLocaleString()} TOKEN = 1 COIN.`;
 }
 function renderBalances(data){
   const t=(data||[]).reduce((s,x)=>s+Number(x.token_amount||0),0);
@@ -603,6 +605,7 @@ $("convertBtn").onclick=async()=>{
 };
 
 async function loadMy(){
+  $("adminIssuanceTotals").textContent="";
   await session(); await loadRules();
 
   if(!user){
@@ -853,6 +856,13 @@ function renderTradeRuleInputs(){
 async function loadAdmin(){
   await session(); await loadRules();
   if(!isAdminUser())return;
+  const accountId=user.id;
+  const {data,error}=await db.rpc("real8_reward_totals");
+  if(user?.id!==accountId||!isAdminUser())return;
+  const totals=data?.[0];
+  $("adminIssuanceTotals").textContent=error||totals?.issued_tokens==null||totals?.issued_coins==null
+    ?"누적 발행량을 불러오지 못했습니다."
+    :`누적 발행량 · 토큰 ${Number(totals.issued_tokens).toLocaleString()} TOKEN · 코인 ${Number(totals.issued_coins).toLocaleString()} COIN`;
 
   renderTradeRuleInputs();
   $("ruleVirtual").value=rules.virtual_proposal_token;
